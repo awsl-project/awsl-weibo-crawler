@@ -120,6 +120,13 @@ class Tools:
             check_pika_channel()
             if not channel:
                 return
+            # Check if required fields exist
+            if "user" not in re_wbdata or "id" not in re_wbdata["user"]:
+                _logger.warning("Missing user information in re_wbdata for mblogid %s", re_mblogid)
+                return
+            if "mblogid" not in re_wbdata:
+                _logger.warning("Missing mblogid in re_wbdata")
+                return
             wb_url = WB_URL_PREFIX.format(
                 re_wbdata["user"]["id"], re_wbdata["mblogid"])
             pic_infos = re_wbdata.get("pic_infos", {})
