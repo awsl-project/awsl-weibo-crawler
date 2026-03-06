@@ -22,6 +22,7 @@ class WbAwsl(object):
         self.max_id = int(awsl_producer.max_id) if awsl_producer.max_id else Tools.select_max_id(self.uid)
         self.url = WB_DATA_URL.format(awsl_producer.uid)
         self.keyword = awsl_producer.keyword
+        self.headers = Tools.fetch_wb_headers()
         _logger.info("awsl init done %s" % awsl_producer.uid)
 
     @staticmethod
@@ -60,7 +61,7 @@ class WbAwsl(object):
         try:
             re_mblogid = Tools.update_mblog(self.awsl_producer, wbdata)
             re_wbdata = Tools.wb_get(
-                WB_SHOW_URL.format(re_mblogid)
+                WB_SHOW_URL.format(re_mblogid), self.headers
             ) if re_mblogid else {}
             Tools.send2bot(self.awsl_producer, re_mblogid, re_wbdata)
             Tools.update_pic(wbdata, re_wbdata)
@@ -72,7 +73,7 @@ class WbAwsl(object):
         获取微博列表数据
         """
         for page in range(1, settings.max_page):
-            raw_data = Tools.wb_get(url=self.url + str(page))
+            raw_data = Tools.wb_get(url=self.url + str(page), headers=self.headers)
 
             try:
                 wbdatas = WeiboList.model_validate(raw_data)

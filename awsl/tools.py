@@ -50,10 +50,9 @@ class Tools:
             return {}
 
     @staticmethod
-    def wb_get(url) -> dict:
+    def wb_get(url, headers=None) -> dict:
         try:
-            headers = Tools.fetch_wb_headers()
-            res = httpx.get(url=url, headers=headers)
+            res = httpx.get(url=url, headers=headers or {})
             res.raise_for_status()
             return res.json()
         except Exception as e:
