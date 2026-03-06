@@ -37,9 +37,23 @@ def check_pika_channel() -> None:
 class Tools:
 
     @staticmethod
+    def fetch_wb_headers() -> dict:
+        try:
+            res = httpx.get(
+                url=f"{settings.awsl_api_url}/admin/wb_headers",
+                headers={"Authorization": f"Bearer {settings.awsl_api_token}"},
+            )
+            res.raise_for_status()
+            return res.json()
+        except Exception as e:
+            _logger.exception(e)
+            return {}
+
+    @staticmethod
     def wb_get(url) -> dict:
         try:
-            res = httpx.get(url=url, headers=settings.headers)
+            headers = Tools.fetch_wb_headers()
+            res = httpx.get(url=url, headers=headers)
             res.raise_for_status()
             return res.json()
         except Exception as e:

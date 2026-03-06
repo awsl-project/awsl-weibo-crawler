@@ -1,5 +1,4 @@
 import os
-from typing import Dict
 
 from pydantic_settings import BaseSettings
 
@@ -12,7 +11,8 @@ CHUNK_SIZE = 9
 
 
 class Settings(BaseSettings):
-    headers: Dict[str, str] = {}
+    awsl_api_url: str = ""
+    awsl_api_token: str = ""
     max_page: int = 50
     db_url: str = ""
     pika_url: str = ""
