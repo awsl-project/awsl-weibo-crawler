@@ -9,6 +9,10 @@ from .config import FALLBACK_HEADERS, settings
 _logger = logging.getLogger(__name__)
 
 
+class InvalidHeadersError(Exception):
+    pass
+
+
 class WeiboSession:
     """Persistent HTTP session with anti-detection: jitter, retry, cookie merging."""
 
@@ -67,8 +71,8 @@ class WeiboSession:
                 resp.raise_for_status()
                 text = resp.text
                 if text.lstrip().startswith("<"):
-                    _logger.warning(f"Received HTML instead of JSON from {url[:60]}")
-                    return None
+                    _logger.error(f"Received HTML instead of JSON from {url[:60]}, headers may be invalid")
+                    raise InvalidHeadersError("Headers invalid: received HTML instead of JSON")
                 return resp.json()
 
             except httpx.HTTPStatusError as exc:
