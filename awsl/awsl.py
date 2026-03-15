@@ -21,7 +21,7 @@ def _random_delay(base: float = 5.0, sigma: float = 2.0, min_delay: float = 2.0)
     delay = max(min_delay, random.gauss(base, sigma))
     if random.random() < 0.05:
         delay += random.uniform(3.0, 8.0)
-    _logger.debug(f"Sleep {delay:.2f}s")
+    _logger.info(f"Sleep {delay:.2f}s")
     time.sleep(delay)
 
 
@@ -69,10 +69,8 @@ class WbAwsl:
         _logger.info(f"awsl run: uid={self.uid} done")
 
     def process_single(self, wbdata: WeiboListItem, session: WeiboSession) -> None:
-        _logger.info(f"Processing wbdata id={wbdata.id} mblogid={wbdata.mblogid}")
         try:
             re_mblogid = update_mblog(self.awsl_producer, wbdata)
-            _logger.info(f"update_mblog done, re_mblogid={re_mblogid}")
             re_wbdata = session.get(
                 WB_SHOW_URL.format(re_mblogid)
             ) if re_mblogid else {}

@@ -53,8 +53,8 @@ def update_max_id(uid: str, max_id: int) -> None:
 def update_mblog(awsl_producer: AwslProducer, wbdata: WeiboListItem) -> str:
     origin_wbdata = wbdata.retweeted_status or wbdata
     if not origin_wbdata.user:
-        _logger.warning(f"Skipped mblog id={wbdata.id}: origin_wbdata has no user info")
-        return ""
+        _logger.warning(f"Skipped mblog write id={wbdata.id}: no user info, will still fetch detail")
+        return origin_wbdata.mblogid if origin_wbdata.mblogid else ""
     _logger.info(f"awsl update db mblog awsl_producer={awsl_producer.name} id={wbdata.id} mblogid={wbdata.mblogid}")
     with _get_session() as session:
         mblog = Mblog(
@@ -78,8 +78,17 @@ def update_pic(wbdata: WeiboListItem, re_wbdata: dict) -> None:
         return
     pic_infos = re_wbdata.get("pic_infos", {})
     pic_ids = re_wbdata.get("pic_ids", [])
+    if not pic_ids:
+        return
     with _get_session() as session:
+        existing = {
+            row[0] for row in
+            session.query(Pic.pic_id).filter(Pic.awsl_id == wbdata.id).all()
+        }
+        added = 0
         for sequence, pic_id in enumerate(pic_ids):
+            if pic_id in existing:
+                continue
             if pic_id not in pic_infos:
                 _logger.warning(f"pic_id {pic_id} not found in pic_infos, skipping")
                 continue
@@ -89,8 +98,9 @@ def update_pic(wbdata: WeiboListItem, re_wbdata: dict) -> None:
                 pic_id=pic_id,
                 pic_info=json.dumps(pic_infos[pic_id]),
             ))
+            added += 1
         session.commit()
-        _logger.info(f"Committed {len(pic_ids)} pics for awsl_id={wbdata.id}")
+        _logger.info(f"Committed {added} new pics for awsl_id={wbdata.id} (skipped {len(existing)} existing)")
 
 
 def find_all_awsl_producer() -> List[AwslProducer]:

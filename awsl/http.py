@@ -66,7 +66,7 @@ class WeiboSession:
 
                 resp.raise_for_status()
                 text = resp.text
-                if text.startswith("<"):
+                if text.lstrip().startswith("<"):
                     _logger.warning(f"Received HTML instead of JSON from {url[:60]}")
                     return None
                 return resp.json()
