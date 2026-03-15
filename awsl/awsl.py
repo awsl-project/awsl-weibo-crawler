@@ -3,7 +3,7 @@ import time
 import random
 import logging
 
-from typing import Generator
+from typing import List
 
 from .db import find_all_awsl_producer, select_max_id, update_max_id, update_mblog, update_pic
 from .http import WeiboSession, fetch_wb_headers
@@ -83,7 +83,8 @@ class WbAwsl:
         except Exception:
             _logger.exception(f"Failed to process wbdata id={wbdata.id}")
 
-    def get_wbdata(self, max_id: int, session: WeiboSession) -> Generator[WeiboListItem, None, None]:
+    def get_wbdata(self, max_id: int, session: WeiboSession) -> List[WeiboListItem]:
+        result = []
         for page in range(1, settings.max_page + 1):
             raw_data = session.get(url=WB_DATA_URL.format(self.uid, page))
 
@@ -101,15 +102,17 @@ class WbAwsl:
             _logger.info(f"Fetched {len(wbdata_list)} weibos for uid={self.uid} page={page}")
 
             if not wbdata_list:
-                return
+                break
 
+            stop = False
             for wbdata in wbdata_list:
                 if wbdata.id <= max_id and page == 1:
                     _logger.info(f"Skipped old weibo id={wbdata.id} on page 1 for uid={self.uid}")
                     continue
                 elif wbdata.id <= max_id:
                     _logger.info(f"Reached old weibo id={wbdata.id} <= max_id={max_id}, stopping uid={self.uid} page={page}")
-                    return
+                    stop = True
+                    break
                 if wbdata.id > self.max_id:
                     self.max_id = wbdata.id
                 text_raw = WB_EMO.sub("", wbdata.text_raw)
@@ -117,5 +120,9 @@ class WbAwsl:
                     _logger.info(f"Skipped weibo id={wbdata.id} keyword not matched for uid={self.uid}")
                     continue
                 _logger.info(f"Matched weibo id={wbdata.id} mblogid={wbdata.mblogid} for uid={self.uid} keyword='{self.keyword}'")
-                yield wbdata
+                result.append(wbdata)
+            if stop:
+                break
             _random_delay()
+        _logger.info(f"Collected {len(result)} matched weibos for uid={self.uid}")
+        return result
