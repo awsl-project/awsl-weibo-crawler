@@ -59,6 +59,7 @@ def update_mblog(awsl_producer: AwslProducer, wbdata: WeiboListItem) -> str:
         )
         session.merge(mblog)
         session.commit()
+        _logger.info(f"Committed mblog id={wbdata.id} mblogid={wbdata.mblogid}")
 
     return origin_wbdata.mblogid
 
@@ -67,8 +68,9 @@ def update_pic(wbdata: WeiboListItem, re_wbdata: dict) -> None:
     if not re_wbdata:
         return
     pic_infos = re_wbdata.get("pic_infos", {})
+    pic_ids = re_wbdata.get("pic_ids", [])
     with _get_session() as session:
-        for sequence, pic_id in enumerate(re_wbdata.get("pic_ids", [])):
+        for sequence, pic_id in enumerate(pic_ids):
             if pic_id not in pic_infos:
                 _logger.warning(f"pic_id {pic_id} not found in pic_infos, skipping")
                 continue
@@ -79,6 +81,7 @@ def update_pic(wbdata: WeiboListItem, re_wbdata: dict) -> None:
                 pic_info=json.dumps(pic_infos[pic_id]),
             ))
         session.commit()
+        _logger.info(f"Committed {len(pic_ids)} pics for awsl_id={wbdata.id}")
 
 
 def find_all_awsl_producer() -> List[AwslProducer]:
