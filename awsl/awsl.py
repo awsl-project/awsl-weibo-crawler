@@ -1,10 +1,13 @@
 import re
 import time
+import random
 import logging
 
 from typing import Generator
 
-from .tools import Tools
+from .db import find_all_awsl_producer, select_max_id, update_max_id, update_mblog, update_pic
+from .http import WeiboSession, fetch_wb_headers
+from .mq import MQPublisher
 from .models.models import AwslProducer
 from .pydantic_models import WeiboList, WeiboListItem
 from .config import settings, WB_DATA_URL, WB_SHOW_URL
@@ -14,72 +17,80 @@ _logger = logging.getLogger(__name__)
 WB_EMO = re.compile(r'\[awsl\]')
 
 
-class WbAwsl(object):
+def _random_delay(base: float = 5.0, sigma: float = 2.0, min_delay: float = 2.0) -> None:
+    delay = max(min_delay, random.gauss(base, sigma))
+    if random.random() < 0.05:
+        delay += random.uniform(3.0, 8.0)
+    _logger.debug(f"Sleep {delay:.2f}s")
+    time.sleep(delay)
 
-    def __init__(self, awsl_producer: AwslProducer) -> None:
+
+class WbAwsl:
+
+    def __init__(self, awsl_producer: AwslProducer, headers: dict, mq: MQPublisher) -> None:
         self.awsl_producer = awsl_producer
         self.uid = awsl_producer.uid
-        self.max_id = int(awsl_producer.max_id) if awsl_producer.max_id else Tools.select_max_id(self.uid)
-        self.url = WB_DATA_URL.format(awsl_producer.uid)
+        self.max_id = int(awsl_producer.max_id) if awsl_producer.max_id else select_max_id(self.uid)
         self.keyword = awsl_producer.keyword
-        self.headers = Tools.fetch_wb_headers()
-        _logger.info("awsl init done %s" % awsl_producer.uid)
+        self.headers = headers
+        self.mq = mq
+        _logger.info(f"awsl init done {awsl_producer.uid}")
 
     @staticmethod
     def start() -> None:
-        awsl_producers = Tools.find_all_awsl_producer()
+        awsl_producers = find_all_awsl_producer()
         len_awsl_producers = len(awsl_producers)
+        headers = fetch_wb_headers()
+        mq = MQPublisher()
 
-        for i, awsl_producer in enumerate(awsl_producers):
-            _logger.info(f"start crawl {i}/{len_awsl_producers}: {awsl_producer.uid}")
-            awsl = WbAwsl(awsl_producer)
-            awsl.run()
-            time.sleep(10)
-
-        _logger.info("awsl run all awsl_producers done")
+        try:
+            for i, awsl_producer in enumerate(awsl_producers):
+                _logger.info(f"start crawl {i}/{len_awsl_producers}: {awsl_producer.uid}")
+                awsl = WbAwsl(awsl_producer, headers, mq)
+                awsl.run()
+                _random_delay(base=8.0, sigma=3.0, min_delay=4.0)
+            _logger.info("awsl run all awsl_producers done")
+        finally:
+            mq.close()
 
     def run(self) -> None:
-        """
-        获取微博数据并处理
-        """
-        _logger.info("awsl run: uid=%s max_id=%s" % (self.uid, self.max_id))
+        _logger.info(f"awsl run: uid={self.uid} max_id={self.max_id}")
         try:
-            for wbdata in self.get_wbdata(self.max_id):
-                self.process_single(wbdata)
-                time.sleep(10)
-        except Exception as e:
-            _logger.exception(e)
-        _logger.info("awsl run: uid=%s done" % self.uid)
+            with WeiboSession(self.headers) as session:
+                for wbdata in self.get_wbdata(self.max_id, session):
+                    self.process_single(wbdata, session)
+                    _random_delay()
+        except Exception:
+            _logger.exception(f"awsl run failed for uid={self.uid}")
+        _logger.info(f"awsl run: uid={self.uid} done")
 
-    def process_single(self, wbdata: WeiboListItem) -> None:
-        """
-        处理单条微博
-        """
+    def process_single(self, wbdata: WeiboListItem, session: WeiboSession) -> None:
         if wbdata.id > self.max_id:
-            Tools.update_max_id(self.uid, wbdata.id)
+            update_max_id(self.uid, wbdata.id)
             self.max_id = wbdata.id
         try:
-            re_mblogid = Tools.update_mblog(self.awsl_producer, wbdata)
-            re_wbdata = Tools.wb_get(
-                WB_SHOW_URL.format(re_mblogid), self.headers
+            re_mblogid = update_mblog(self.awsl_producer, wbdata)
+            re_wbdata = session.get(
+                WB_SHOW_URL.format(re_mblogid)
             ) if re_mblogid else {}
-            Tools.send2bot(self.awsl_producer, re_mblogid, re_wbdata)
-            Tools.update_pic(wbdata, re_wbdata)
-        except Exception as e:
-            _logger.exception(e)
+            self.mq.send2bot(self.awsl_producer, re_mblogid, re_wbdata)
+            update_pic(wbdata, re_wbdata)
+        except Exception:
+            _logger.exception(f"Failed to process wbdata id={wbdata.id}")
 
-    def get_wbdata(self, max_id: int) -> Generator[WeiboListItem, None, None]:
-        """
-        获取微博列表数据
-        """
-        for page in range(1, settings.max_page):
-            raw_data = Tools.wb_get(url=self.url + str(page), headers=self.headers)
+    def get_wbdata(self, max_id: int, session: WeiboSession) -> Generator[WeiboListItem, None, None]:
+        for page in range(1, settings.max_page + 1):
+            raw_data = session.get(url=WB_DATA_URL.format(self.uid, page))
+
+            if raw_data is None:
+                _logger.warning(f"No response for uid={self.uid} page={page}, skipping")
+                continue
 
             try:
                 wbdatas = WeiboList.model_validate(raw_data)
-                wbdata_list = wbdatas.data.list if wbdatas and wbdatas.data else []
-            except Exception as e:
-                _logger.exception(e)
+                wbdata_list = wbdatas.data.list if wbdatas.data else []
+            except Exception:
+                _logger.exception(f"Failed to parse weibo list for uid={self.uid} page={page}")
                 continue
 
             if not wbdata_list:
@@ -90,9 +101,8 @@ class WbAwsl(object):
                     continue
                 elif wbdata.id <= max_id:
                     return
-                # TODO: 正则是不是更好
                 text_raw = WB_EMO.sub("", wbdata.text_raw)
                 if self.keyword not in text_raw:
                     continue
                 yield wbdata
-            time.sleep(10)
+            _random_delay()
