@@ -31,7 +31,7 @@ class WbAwsl:
         self.awsl_producer = awsl_producer
         self.uid = awsl_producer.uid
         self.max_id = int(awsl_producer.max_id) if awsl_producer.max_id else select_max_id(self.uid)
-        self.keyword = awsl_producer.keyword
+        self.keyword = awsl_producer.keyword or ""
         self.headers = headers
         self.mq = mq
         _logger.info(f"awsl init done {awsl_producer.uid}")
@@ -55,19 +55,20 @@ class WbAwsl:
 
     def run(self) -> None:
         _logger.info(f"awsl run: uid={self.uid} max_id={self.max_id}")
+        old_max_id = self.max_id
         try:
             with WeiboSession(self.headers) as session:
-                for wbdata in self.get_wbdata(self.max_id, session):
+                for wbdata in self.get_wbdata(old_max_id, session):
                     self.process_single(wbdata, session)
                     _random_delay()
         except Exception:
             _logger.exception(f"awsl run failed for uid={self.uid}")
+        if self.max_id > old_max_id:
+            update_max_id(self.uid, self.max_id)
+            _logger.info(f"Updated max_id {old_max_id} -> {self.max_id} for uid={self.uid}")
         _logger.info(f"awsl run: uid={self.uid} done")
 
     def process_single(self, wbdata: WeiboListItem, session: WeiboSession) -> None:
-        if wbdata.id > self.max_id:
-            update_max_id(self.uid, wbdata.id)
-            self.max_id = wbdata.id
         try:
             re_mblogid = update_mblog(self.awsl_producer, wbdata)
             re_wbdata = session.get(
@@ -107,6 +108,8 @@ class WbAwsl:
                 elif wbdata.id <= max_id:
                     _logger.info(f"Reached old weibo id={wbdata.id} <= max_id={max_id}, stopping uid={self.uid} page={page}")
                     return
+                if wbdata.id > self.max_id:
+                    self.max_id = wbdata.id
                 text_raw = WB_EMO.sub("", wbdata.text_raw)
                 if self.keyword not in text_raw:
                     _logger.info(f"Skipped weibo id={wbdata.id} keyword not matched for uid={self.uid}")
