@@ -103,9 +103,12 @@ class WbAwsl:
                 break
 
             stop = False
+            skipped_old = 0
+            skipped_keyword = 0
+            matched = 0
             for wbdata in wbdata_list:
                 if wbdata.id <= max_id and page == 1:
-                    _logger.info(f"Skipped old weibo id={wbdata.id} on page 1 for uid={self.uid}")
+                    skipped_old += 1
                     continue
                 elif wbdata.id <= max_id:
                     _logger.info(f"Reached old weibo id={wbdata.id} <= max_id={max_id}, stopping uid={self.uid} page={page}")
@@ -115,10 +118,12 @@ class WbAwsl:
                     self.max_id = wbdata.id
                 text_raw = WB_EMO.sub("", wbdata.text_raw)
                 if self.keyword not in text_raw:
-                    _logger.info(f"Skipped weibo id={wbdata.id} keyword not matched for uid={self.uid}")
+                    skipped_keyword += 1
                     continue
                 _logger.info(f"Matched weibo id={wbdata.id} mblogid={wbdata.mblogid} for uid={self.uid} keyword='{self.keyword}'")
+                matched += 1
                 result.append(wbdata)
+            _logger.info(f"Page {page} uid={self.uid}: matched={matched} skipped_old={skipped_old} skipped_keyword={skipped_keyword}")
             if stop:
                 break
             _random_delay()
