@@ -69,8 +69,10 @@ class WbAwsl:
         _logger.info(f"awsl run: uid={self.uid} done")
 
     def process_single(self, wbdata: WeiboListItem, session: WeiboSession) -> None:
+        _logger.info(f"Processing wbdata id={wbdata.id} mblogid={wbdata.mblogid}")
         try:
             re_mblogid = update_mblog(self.awsl_producer, wbdata)
+            _logger.info(f"update_mblog done, re_mblogid={re_mblogid}")
             re_wbdata = session.get(
                 WB_SHOW_URL.format(re_mblogid)
             ) if re_mblogid else {}
