@@ -45,6 +45,7 @@ def update_max_id(uid: str, max_id: int) -> None:
 def update_mblog(awsl_producer: AwslProducer, wbdata: WeiboListItem) -> str:
     origin_wbdata = wbdata.retweeted_status or wbdata
     if not origin_wbdata.user:
+        _logger.warning(f"Skipped mblog id={wbdata.id}: origin_wbdata has no user info")
         return ""
     _logger.info(f"awsl update db mblog awsl_producer={awsl_producer.name} id={wbdata.id} mblogid={wbdata.mblogid}")
     with _get_session() as session:
