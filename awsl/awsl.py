@@ -73,6 +73,8 @@ class WbAwsl:
             re_wbdata = session.get(
                 WB_SHOW_URL.format(re_mblogid)
             ) if re_mblogid else {}
+            pic_count = len(re_wbdata.get("pic_ids", [])) if re_wbdata else 0
+            _logger.info(f"Fetched detail for re_mblogid={re_mblogid} pics={pic_count}")
             self.mq.send2bot(self.awsl_producer, re_mblogid, re_wbdata)
             update_pic(wbdata, re_wbdata)
         except Exception:
@@ -93,16 +95,22 @@ class WbAwsl:
                 _logger.exception(f"Failed to parse weibo list for uid={self.uid} page={page}")
                 continue
 
+            _logger.info(f"Fetched {len(wbdata_list)} weibos for uid={self.uid} page={page}")
+
             if not wbdata_list:
                 return
 
             for wbdata in wbdata_list:
                 if wbdata.id <= max_id and page == 1:
+                    _logger.info(f"Skipped old weibo id={wbdata.id} on page 1 for uid={self.uid}")
                     continue
                 elif wbdata.id <= max_id:
+                    _logger.info(f"Reached old weibo id={wbdata.id} <= max_id={max_id}, stopping uid={self.uid} page={page}")
                     return
                 text_raw = WB_EMO.sub("", wbdata.text_raw)
                 if self.keyword not in text_raw:
+                    _logger.info(f"Skipped weibo id={wbdata.id} keyword not matched for uid={self.uid}")
                     continue
+                _logger.info(f"Matched weibo id={wbdata.id} mblogid={wbdata.mblogid} for uid={self.uid} keyword='{self.keyword}'")
                 yield wbdata
             _random_delay()

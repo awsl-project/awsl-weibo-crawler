@@ -93,7 +93,9 @@ def fetch_wb_headers() -> dict:
             timeout=10.0,
         )
         res.raise_for_status()
-        return res.json()
+        headers = res.json()
+        _logger.info(f"Fetched wb_headers from API, keys: {list(headers.keys())}")
+        return headers
     except Exception:
         _logger.exception("Failed to fetch wb_headers from API")
         return {}
