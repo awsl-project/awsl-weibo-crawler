@@ -20,7 +20,14 @@ _SessionFactory = None
 def _get_session():
     global _engine, _SessionFactory
     if _SessionFactory is None:
-        _engine = create_engine(settings.db_url, pool_size=5, max_overflow=10)
+        _engine = create_engine(
+            settings.db_url,
+            pool_size=5,
+            max_overflow=10,
+            pool_timeout=10,
+            pool_recycle=3600,
+            connect_args={"connect_timeout": 10},
+        )
         _SessionFactory = sessionmaker(bind=_engine)
     return _SessionFactory()
 
